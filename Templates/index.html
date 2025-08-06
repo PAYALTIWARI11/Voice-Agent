@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Agent - Day 4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #c4e4ff 100%);
+        }
+        .container-card {
+            background-color: #ffffff;
+            backdrop-filter: blur(10px);
+            background-color: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .section-card {
+            background: rgba(255, 255, 255, 0.6);
+        }
+        .btn {
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .animate-pulse-on-record {
+            animation: pulse 1s infinite;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+    <div class="container-card max-w-4xl w-full mx-auto p-8 rounded-3xl shadow-2xl space-y-8">
+
+        <!-- Header for the page -->
+        <header class="text-center">
+            <h1 class="text-5xl font-extrabold text-gray-800">30 Days of AI Voice Agents</h1>
+            <p class="mt-2 text-xl text-gray-600">Day 4: Echo Bot</p>
+        </header>
+
+        <!-- Existing Text to Speech Section -->
+        <section class="section-card p-6 rounded-2xl border border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-700 mb-4">Text to Speech</h1>
+            <div class="space-y-4">
+                <textarea id="tts-text-area" class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-300 transition-colors" rows="4" placeholder="Enter text to convert to speech..."></textarea>
+                <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                    <select id="voice-select" class="w-full sm:w-auto p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-blue-300 transition-colors"></select>
+                    <button id="speak-button" class="btn w-full sm:w-auto px-8 py-3 bg-purple-600 text-white font-semibold rounded-lg shadow-lg hover:bg-purple-700">Speak</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- New Echo Bot Section -->
+        <section class="section-card p-6 rounded-2xl border border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-700 mb-4">Echo Bot</h1>
+            <div class="mt-4 space-y-6 text-center">
+                <p id="status-message" class="text-gray-600 text-lg transition-all duration-300">Press 'Start Recording' to begin.</p>
+                <div class="flex justify-center space-x-6">
+                    <button id="startButton" class="btn px-8 py-4 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600">Start Recording</button>
+                    <button id="stopButton" class="btn px-8 py-4 bg-red-500 text-white font-bold rounded-full shadow-lg hover:bg-red-600" disabled>Stop Recording</button>
+                </div>
+                <audio id="audioPlayback" class="w-full mt-6 rounded-lg shadow-inner" controls></audio>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        // --- Text to Speech Logic (from previous days) ---
+        const textArea = document.getElementById('tts-text-area');
+        const voiceSelect = document.getElementById('voice-select');
+        const speakButton = document.getElementById('speak-button');
+        const synth = window.speechSynthesis;
+
+        let voices = [];
+
+        function populateVoiceList() {
+            voices = synth.getVoices().sort((a, b) => a.name.localeCompare(b.name));
+            voiceSelect.innerHTML = '';
+            voices.forEach(voice => {
+                const option = document.createElement('option');
+                option.textContent = `${voice.name} (${voice.lang})`;
+                option.setAttribute('data-lang', voice.lang);
+                option.setAttribute('data-name', voice.name);
+                voiceSelect.appendChild(option);
+            });
+        }
+
+        if (synth.onvoiceschanged !== undefined) {
+            synth.onvoiceschanged = populateVoiceList;
+        }
+        populateVoiceList();
+
+        speakButton.addEventListener('click', () => {
+            const text = textArea.value;
+            if (text !== '') {
+                const utterance = new SpeechSynthesisUtterance(text);
+                const selectedOption = voiceSelect.selectedOptions[0].getAttribute('data-name');
+                utterance.voice = voices.find(voice => voice.name === selectedOption);
+                synth.speak(utterance);
+            }
+        });
+
+        // --- Echo Bot Logic (Day 4) ---
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const audioPlayback = document.getElementById('audioPlayback');
+        const statusMessage = document.getElementById('status-message');
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // Function to start the recording process
+        async function startRecording() {
+            console.log('Attempting to start recording...');
+            try {
+                // Request microphone access
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                // Listen for data chunks and push them into the array
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                // When recording stops, process the audio chunks
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    audioPlayback.src = audioUrl;
+                    
+                    statusMessage.textContent = 'Recording finished. Press play to listen.';
+                    statusMessage.classList.remove('animate-pulse-on-record');
+                };
+
+                // Start the recording and update the UI
+                mediaRecorder.start();
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                statusMessage.textContent = 'Recording...';
+                statusMessage.classList.add('animate-pulse-on-record');
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                statusMessage.textContent = 'Error: Could not access microphone. Please check your permissions.';
+                // Ensure buttons are reset to original state on error
+                startButton.disabled = false;
+                stopButton.disabled = true;
+            }
+        }
+
+        // Function to stop the recording process
+        function stopRecording() {
+            console.log('Attempting to stop recording...');
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                
+                // Stop the microphone stream tracks to release the mic
+                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+                // Update the UI
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                statusMessage.textContent = 'Processing audio...';
+                statusMessage.classList.remove('animate-pulse-on-record');
+            }
+        }
+
+        // Add event listeners to the buttons
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
+    </script>
+</body>
+</html>
