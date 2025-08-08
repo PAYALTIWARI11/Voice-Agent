@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Voice Agent - Day 5</title>
+    <title>AI Voice Agent - Day 6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');
@@ -119,7 +119,7 @@
         <!-- Header for the page -->
         <header class="text-center mb-8">
             <h1 class="text-6xl font-extrabold text-white leading-tight">30 Days of AI Voice Agents 🚀</h1>
-            <p class="mt-3 text-2xl text-gray-300">Day 5: Text to Speech & Echo Bot 💾</p>
+            <p class="mt-3 text-2xl text-gray-300">Day 6: Voice-to-Text Transcription 🗣️</p>
         </header>
 
         <!-- Text to Speech Section -->
@@ -134,16 +134,19 @@
             </div>
         </section>
 
-        <!-- Echo Bot Section -->
+        <!-- Voice-to-Text Section -->
         <section class="section-card p-8 rounded-2xl">
-            <h1 class="text-4xl font-bold text-white mb-6">Echo Bot 🎤</h1>
+            <h1 class="text-4xl font-bold text-white mb-6">Echo Bot with Transcription 🎤</h1>
             <div class="mt-4 space-y-8 text-center">
-                <p id="echo-status-message" class="text-gray-300 text-xl transition-all duration-300">Click 'Start Recording' to begin your voice echo and upload! 🔊</p>
+                <p id="echo-status-message" class="text-gray-300 text-xl transition-all duration-300">Click 'Start Recording' to begin your voice recording for transcription! 🔊</p>
                 <div class="flex justify-center space-x-8">
                     <button id="startButton" class="btn px-10 py-5 bg-green-500 text-white font-bold rounded-full shadow-lg hover:bg-green-600">Start Recording</button>
                     <button id="stopButton" class="btn px-10 py-5 bg-red-500 text-white font-bold rounded-full shadow-lg hover:bg-red-600" disabled>Stop Recording</button>
                 </div>
-                <audio id="audioPlayback" class="w-full mt-8 rounded-lg shadow-inner bg-gray-800" controls></audio>
+                <div class="mt-8 text-left">
+                    <h2 class="text-2xl font-bold text-white mb-2">Transcription:</h2>
+                    <p id="transcript-display" class="p-4 border border-gray-600 rounded-lg bg-gray-800 text-white text-lg min-h-[5rem] overflow-auto">The transcribed text will appear here...</p>
+                </div>
             </div>
         </section>
 
@@ -203,78 +206,79 @@
             }
         });
 
-        // --- Echo Bot Logic (Day 5 Updates) ---
+        // --- Echo Bot with Transcription Logic (Day 6 Updates) ---
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
-        const audioPlayback = document.getElementById('audioPlayback');
         const echoStatusMessage = document.getElementById('echo-status-message');
+        const transcriptDisplay = document.getElementById('transcript-display');
 
         let mediaRecorder;
         let audioChunks = [];
 
-        // Function to start the recording process
         async function startRecording() {
-            console.log('Echo Bot: Attempting to start recording...'); // Debug log
+            console.log('Transcription Bot: Attempting to start recording...');
             echoStatusMessage.textContent = 'Requesting microphone access... Please allow the browser pop-up.';
-            echoStatusMessage.classList.remove('status-success', 'status-error'); // Clear previous status styles
+            transcriptDisplay.textContent = 'The transcribed text will appear here...'; // Reset transcription display
 
             try {
-                // Request microphone access
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                console.log('Echo Bot: Microphone access granted.'); // Debug log
+                console.log('Transcription Bot: Microphone access granted.');
 
                 mediaRecorder = new MediaRecorder(stream);
                 audioChunks = [];
 
                 mediaRecorder.ondataavailable = event => {
                     audioChunks.push(event.data);
-                    console.log('Echo Bot: Data available, chunk size:', event.data.size); // Debug log
+                    console.log('Transcription Bot: Data available, chunk size:', event.data.size);
                 };
 
                 mediaRecorder.onstop = async () => {
-                    console.log('Echo Bot: Recording stopped. Total chunks:', audioChunks.length); // Debug log
+                    console.log('Transcription Bot: Recording stopped. Total chunks:', audioChunks.length);
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    audioPlayback.src = audioUrl; // Still play locally
                     
-                    echoStatusMessage.textContent = 'Recording finished. Playing locally and uploading to server...';
+                    echoStatusMessage.textContent = 'Recording finished. Sending to server for transcription...';
                     echoStatusMessage.classList.remove('animate-pulse-on-record');
+                    transcriptDisplay.textContent = 'Transcribing audio... Please wait.';
 
                     const formData = new FormData();
-                    // Give the file a dynamic name (e.g., timestamp.webm)
-                    const filename = `recorded_audio_${Date.now()}.webm`; 
+                    const filename = `recorded_audio_${Date.now()}.webm`;
                     formData.append('audio_file', audioBlob, filename);
 
                     try {
-                        console.log('Echo Bot: Attempting to upload audio to server...'); // Debug log
-                        const response = await fetch('http://127.0.0.1:8000/upload-audio/', {
+                        console.log('Transcription Bot: Attempting to transcribe audio via server...');
+                        const response = await fetch('http://127.0.0.1:8000/transcribe/file', {
                             method: 'POST',
                             body: formData,
-                            // No 'Content-Type' header needed for FormData, browser sets it automatically
                         });
 
                         if (!response.ok) {
                             const errorText = await response.text();
-                            console.error('Echo Bot: Server upload failed response:', response.status, errorText); // Debug log
+                            console.error('Transcription Bot: Server transcription failed:', response.status, errorText);
                             throw new Error(`HTTP error! Status: ${response.status}. Details: ${errorText}`);
                         }
 
                         const result = await response.json();
-                        echoStatusMessage.textContent = `Upload successful! File: ${result.filename}, Size: ${result.file_size} bytes.`;
-                        echoStatusMessage.classList.add('status-success');
-                        console.log('Echo Bot: Upload successful:', result);
-
-                    } catch (uploadError) {
-                        console.error('Echo Bot: Upload failed:', uploadError); // Debug log
-                        // More specific message for network issues
-                        if (uploadError.message.includes("Failed to fetch")) {
-                            echoStatusMessage.textContent = `Upload failed: Could not connect to server. Is your FastAPI backend running at http://127.0.0.1:8000?`;
+                        if (result.transcription) {
+                            echoStatusMessage.textContent = `Transcription successful!`;
+                            echoStatusMessage.classList.add('status-success');
+                            transcriptDisplay.textContent = result.transcription;
+                            console.log('Transcription Bot: Transcription received:', result.transcription);
                         } else {
-                            echoStatusMessage.textContent = `Upload failed: ${uploadError.message}.`;
+                            echoStatusMessage.textContent = `Transcription failed: No text returned.`;
+                            echoStatusMessage.classList.add('status-error');
+                            transcriptDisplay.textContent = 'Transcription failed.';
+                        }
+
+                    } catch (transcribeError) {
+                        console.error('Transcription Bot: Transcription failed:', transcribeError);
+                        if (transcribeError.message.includes("Failed to fetch")) {
+                            echoStatusMessage.textContent = `Transcription failed: Could not connect to server. Is your FastAPI backend running?`;
+                        } else {
+                            echoStatusMessage.textContent = `Transcription failed: ${transcribeError.message}.`;
                         }
                         echoStatusMessage.classList.add('status-error');
+                        transcriptDisplay.textContent = 'Transcription failed.';
                     } finally {
-                        // Ensure buttons are reset after upload attempt
                         startButton.disabled = false;
                         stopButton.disabled = true;
                     }
@@ -283,11 +287,11 @@
                 mediaRecorder.start();
                 startButton.disabled = true;
                 stopButton.disabled = false;
-                echoStatusMessage.textContent = 'Recording... Speak now!';
+                echoStatusMessage.textContent = 'Recording... Speak clearly now!';
                 echoStatusMessage.classList.add('animate-pulse-on-record');
             } catch (error) {
-                console.error('Echo Bot: Error accessing microphone:', error); // Debug log
-                echoStatusMessage.textContent = 'Error: Microphone access denied or not found. Please enable it in your browser settings.';
+                console.error('Transcription Bot: Error accessing microphone:', error);
+                echoStatusMessage.textContent = 'Error: Microphone access denied or not found. Please enable it.';
                 echoStatusMessage.classList.add('status-error');
                 echoStatusMessage.classList.remove('animate-pulse-on-record');
                 startButton.disabled = false;
@@ -295,21 +299,17 @@
             }
         }
 
-        // Function to stop the recording process
         function stopRecording() {
-            console.log('Echo Bot: Attempting to stop recording...'); // Debug log
+            console.log('Transcription Bot: Attempting to stop recording...');
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
-                // Stop the microphone stream tracks to release the mic
                 mediaRecorder.stream.getTracks().forEach(track => track.stop());
-                console.log('Echo Bot: Recording stopped and microphone tracks released.'); // Debug log
+                console.log('Transcription Bot: Recording stopped and microphone tracks released.');
             }
         }
 
-        // Add event listeners to the buttons
         startButton.addEventListener('click', startRecording);
         stopButton.addEventListener('click', stopRecording);
-
     </script>
 </body>
 </html>

@@ -10,14 +10,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from google.generativeai.types import GenerateContentResponse
 import google.generativeai as genai
-import aiofiles # Import aiofiles for asynchronous file operations
+import aiofiles
+import assemblyai as aai # Import AssemblyAI SDK
 
 # --- API Keys ---
 # IMPORTANT: Replace these with your actual API keys.
-# You can get a Gemini API key from Google AI Studio.
-# You can get a Murf.ai API key from your Murf.ai dashboard.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw")
-MURF_API_KEY = os.environ.get("MURF_API_KEY", "ap2_9a9ae282-4002-4556-be2d-6c7b6b0fc95d")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "ap2_9a9ae282-4002-4556-be2d-6c7b6b0fc95d")
+MURF_API_KEY = os.environ.get("MURF_API_KEY", "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw")
+# Day 6: AssemblyAI API Key
+ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY", "661f2c6b775c428e8f9647c97314d502")
 
 # --- Configuration ---
 # Configure the Gemini API client
@@ -29,28 +30,21 @@ MURF_API_URL = "https://api.murf.ai/v1/speech/stream"
 VOICE_ID = "en-US-natalie" 
 VOICE = "Natalie"
 
+# AssemblyAI API details
+aai.settings.api_key = ASSEMBLYAI_API_KEY
+
 app = FastAPI()
 
-# --- FIX START ---
 # Get the absolute path to the directory where app.py is located
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# CORRECTED: Now explicitly points to the 'templates' subdirectory
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-UPLOADS_DIR = os.path.join(BASE_DIR, "uploads") # Ensure uploads directory is also relative to app.py
+UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
 
-# Ensure the 'templates' directory actually exists
 if not os.path.isdir(TEMPLATES_DIR):
     print(f"Warning: 'templates' directory not found at {TEMPLATES_DIR}. Please create it and place index.html inside.")
 
-# Mount a directory for static files (our HTML, JS, CSS)
-# This serves files from the BASE_DIR, so if you were to access /static/templates/index.html it would work
-# But we are serving index.html via Jinja2Templates for the root path.
 app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
-
-# Jinja2 for template rendering (used to serve index.html for the root path)
-# Now explicitly tells Jinja2 to look in the 'templates' directory
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
-# --- FIX END ---
 
 # Pydantic model for our API request body (for chat endpoint)
 class ChatRequest(BaseModel):
@@ -63,13 +57,11 @@ async def serve_app(request: Request):
     """
     Serves the main HTML page for the conversational agent.
     """
-    print(f"Attempting to serve index.html from template directory: {TEMPLATES_DIR}") # Debug log
+    print(f"Attempting to serve index.html from template directory: {TEMPLATES_DIR}")
     try:
         return templates.TemplateResponse("index.html", {"request": request})
     except Exception as e:
-        # Catch Jinja2 TemplateNotFound specifically, or any other rendering error
         print(f"Error rendering index.html: {e}")
-        # Provide a more informative error message to the user
         return HTMLResponse(content=f"""
             <html>
                 <head>
@@ -84,7 +76,6 @@ async def serve_app(request: Request):
                 </body>
             </html>
         """, status_code=500)
-
 
 @app.post("/chat")
 async def chat_with_agent(chat_request: ChatRequest):
@@ -142,34 +133,31 @@ async def chat_with_agent(chat_request: ChatRequest):
         print(f"An unexpected error occurred: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
-@app.post("/upload-audio/")
-async def upload_audio(audio_file: UploadFile = File(...)):
+@app.post("/transcribe/file")
+async def transcribe_file(audio_file: UploadFile = File(...)):
     """
-    Receives an audio file from the frontend, saves it temporarily,
-    and returns its metadata.
+    Day 6 Task: Receives an audio file, transcribes it using AssemblyAI,
+    and returns the transcription.
     """
-    os.makedirs(UPLOADS_DIR, exist_ok=True) # Create uploads directory if it doesn't exist
+    print(f"Received file for transcription: {audio_file.filename}")
 
-    file_location = os.path.join(UPLOADS_DIR, audio_file.filename)
+    # Read the audio file data directly into memory
+    audio_data = await audio_file.read()
     
     try:
-        async with aiofiles.open(file_location, "wb") as f:
-            while contents := await audio_file.read(1024): # Read in chunks
-                await f.write(contents)
-        
-        file_size = os.path.getsize(file_location)
+        # Pass the binary audio data to the AssemblyAI transcriber
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(audio_data)
 
-        print(f"Received file: {audio_file.filename}, Type: {audio_file.content_type}, Size: {file_size} bytes")
+        if transcript.status == aai.TranscriptStatus.error:
+            raise HTTPException(status_code=500, detail=f"Transcription failed: {transcript.error}")
 
-        return {
-            "filename": audio_file.filename,
-            "content_type": audio_file.content_type,
-            "file_size": file_size,
-            "message": "File uploaded successfully!"
-        }
+        print(f"Transcription successful: {transcript.text}")
+        return {"transcription": transcript.text}
+
     except Exception as e:
-        print(f"Error saving file: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not upload file: {e}")
+        print(f"An error occurred during transcription: {e}")
+        raise HTTPException(status_code=500, detail=f"Could not transcribe file: {e}")
 
 if __name__ == "__main__":
     import uvicorn
