@@ -7,35 +7,44 @@ from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from google.generativeai.types import GenerateContentResponse
 import google.generativeai as genai
 import aiofiles
-import assemblyai as aai # Import AssemblyAI SDK
+import assemblyai as aai
+import base64
+import struct
 
 # --- API Keys ---
-# IMPORTANT: Replace these with your actual API keys.
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "ap2_9a9ae282-4002-4556-be2d-6c7b6b0fc95d")
-MURF_API_KEY = os.environ.get("MURF_API_KEY", "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw")
-# Day 6: AssemblyAI API Key
-ASSEMBLYAI_API_KEY = os.environ.get("ASSEMBLYAI_API_KEY", "661f2c6b775c428e8f9647c97314d502")
+# Using AssemblyAI for transcription and Gemini for text generation and TTS.
+# Gemini keys are provided by the canvas environment.
+GEMINI_API_KEY = "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw"
+ASSEMBLYAI_API_KEY = "661f2c6b775c428e8f9647c97314d502"
 
 # --- Configuration ---
-# Configure the Gemini API client
+if not GEMINI_API_KEY or GEMINI_API_KEY == "INSERT_YOUR_GEMINI_API_KEY_HERE":
+    print("FATAL ERROR: Gemini API Key is missing. Please replace the placeholder.")
+if not ASSEMBLYAI_API_KEY or ASSEMBLYAI_API_KEY == "INSERT_YOUR_ASSEMBLYAI_API_KEY_HERE":
+    print("FATAL ERROR: AssemblyAI API Key is missing. Please replace the placeholder.")
+
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
-
-# Murf.ai API details
-MURF_API_URL = "https://api.murf.ai/v1/speech/stream"
-VOICE_ID = "en-US-natalie" 
-VOICE = "Natalie"
 
 # AssemblyAI API details
 aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 app = FastAPI()
 
-# Get the absolute path to the directory where app.py is located
+# --- CORS Middleware Configuration ---
+origins = ["*"] 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 UPLOADS_DIR = os.path.join(BASE_DIR, "uploads")
@@ -46,119 +55,180 @@ if not os.path.isdir(TEMPLATES_DIR):
 app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
-# Pydantic model for our API request body (for chat endpoint)
 class ChatRequest(BaseModel):
     message: str
+
+# Helper function to convert PCM data to WAV format
+def pcm_to_wav(pcm_data, sample_rate=16000):
+    """Converts PCM audio data to a WAV file byte stream."""
+    header = b'RIFF'
+    header += struct.pack('<I', 36 + len(pcm_data))
+    header += b'WAVE'
+    header += b'fmt '
+    header += struct.pack('<I', 16)
+    header += struct.pack('<H', 1) # PCM format
+    header += struct.pack('<H', 1) # Mono channel
+    header += struct.pack('<I', sample_rate)
+    header += struct.pack('<I', sample_rate * 2) # byte rate
+    header += struct.pack('<H', 2) # block align
+    header += struct.pack('<H', 16) # bits per sample
+    header += b'data'
+    header += struct.pack('<I', len(pcm_data))
+    return header + pcm_data
+
+
+async def generate_gemini_audio(text: str) -> bytes:
+    """
+    Generates audio from text using the Gemini TTS API.
+    Returns the audio data as a bytes object in WAV format.
+    """
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": text}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {
+                "voiceConfig": {
+                    "prebuiltVoiceConfig": {"voiceName": "Kore"}
+                }
+            }
+        },
+        "model": "gemini-2.5-flash-preview-tts"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(api_url, json=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            audio_data_b64 = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('inlineData', {}).get('data')
+            
+            if audio_data_b64:
+                pcm_data = base64.b64decode(audio_data_b64)
+                wav_data = pcm_to_wav(pcm_data, sample_rate=16000)
+                return wav_data
+            else:
+                raise HTTPException(status_code=500, detail="Gemini TTS API returned no audio data.")
+
+        except httpx.HTTPStatusError as e:
+            print(f"Gemini TTS API returned an error: {e}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"Gemini API Error: {e.response.text}")
+        except Exception as e:
+            print(f"An unexpected error occurred in Gemini TTS call: {e}")
+            raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 # --- API Endpoints ---
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_app(request: Request):
     """
-    Serves the main HTML page for the conversational agent.
+    Serves the main HTML page.
     """
-    print(f"Attempting to serve index.html from template directory: {TEMPLATES_DIR}")
     try:
         return templates.TemplateResponse("index.html", {"request": request})
     except Exception as e:
         print(f"Error rendering index.html: {e}")
-        return HTMLResponse(content=f"""
-            <html>
-                <head>
-                    <title>Error Loading Page</title>
-                </head>
-                <body>
-                    <h1>Internal Server Error</h1>
-                    <p>There was a problem loading the page. The server could not find 'index.html'.</p>
-                    <p>Please ensure 'index.html' is in the <b>'{os.path.basename(TEMPLATES_DIR)}'</b> directory, which should be inside the same folder as 'app.py'.</p>
-                    <p>Server tried to find template in: <code>{TEMPLATES_DIR}</code></p>
-                    <p>Details: {e}</p>
-                </body>
-            </html>
-        """, status_code=500)
+        return HTMLResponse(content=f"Error loading page: {e}", status_code=500)
 
 @app.post("/chat")
 async def chat_with_agent(chat_request: ChatRequest):
     """
-    Handles the conversational logic (from Day 4).
-    1. Sends the user's message to the Gemini API.
-    2. Takes Gemini's response and sends it to the Murf.ai API.
-    3. Streams the audio back to the client.
+    (Day 4 functionality) Handles a text message, gets a Gemini response,
+    and streams back Gemini-generated audio.
     """
     try:
-        # Step 1: Send the user's message to the Gemini API
-        print(f"User message: {chat_request.message}")
-        
         gemini_response_text = ""
         response_stream = model.generate_content(chat_request.message, stream=True)
         for chunk in response_stream:
             gemini_response_text += chunk.text
 
-        print(f"Gemini response: {gemini_response_text}")
-
-        # Step 2: Use the Gemini response text to call the Murf.ai TTS API
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Token {MURF_API_KEY}"
-        }
+        audio_data = await generate_gemini_audio(gemini_response_text)
         
-        murf_payload = {
-            "voiceId": VOICE_ID,
-            "text": gemini_response_text
-        }
+        return StreamingResponse(
+            content=iter([audio_data]),
+            media_type="audio/wav"
+        )
 
-        async with httpx.AsyncClient() as client:
-            murf_response = await client.post(
-                MURF_API_URL, 
-                headers=headers, 
-                json=murf_payload, 
-                timeout=60.0
-            )
-
-        murf_response.raise_for_status()
-
-        async def audio_streamer():
-            async for chunk in murf_response.aiter_bytes():
-                yield chunk
-
-        return StreamingResponse(audio_streamer(), media_type="audio/mpeg")
-
-    except genai.APIError as e:
-        print(f"Gemini API error: {e}")
-        raise HTTPException(status_code=500, detail=f"Gemini API error: {e}")
-    except httpx.HTTPStatusError as e:
-        print(f"Murf.ai API error: {e.response.text}")
-        raise HTTPException(status_code=500, detail=f"Murf.ai API error: {e.response.text}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        print(f"An error occurred in /chat: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 @app.post("/transcribe/file")
 async def transcribe_file(audio_file: UploadFile = File(...)):
     """
-    Day 6 Task: Receives an audio file, transcribes it using AssemblyAI,
-    and returns the transcription.
+    (Day 6 functionality) Receives an audio file, transcribes it, and returns the transcription.
     """
-    print(f"Received file for transcription: {audio_file.filename}")
-
-    # Read the audio file data directly into memory
-    audio_data = await audio_file.read()
-    
     try:
-        # Pass the binary audio data to the AssemblyAI transcriber
+        audio_data = await audio_file.read()
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(audio_data)
 
         if transcript.status == aai.TranscriptStatus.error:
             raise HTTPException(status_code=500, detail=f"Transcription failed: {transcript.error}")
 
-        print(f"Transcription successful: {transcript.text}")
         return {"transcription": transcript.text}
 
     except Exception as e:
         print(f"An error occurred during transcription: {e}")
         raise HTTPException(status_code=500, detail=f"Could not transcribe file: {e}")
 
+@app.post("/tts/echo")
+async def tts_echo(audio_file: UploadFile = File(...)):
+    """
+    (Day 7 functionality) Echo Bot v2, now with Gemini TTS.
+    1. Transcribes incoming audio using AssemblyAI.
+    2. Sends the transcription to Gemini TTS to get new audio.
+    3. Returns the new Gemini audio and transcription as a JSON object.
+    """
+    print("Received audio file for Echo Bot v2 processing.")
+    try:
+        # This will be printed to the console when a file is received
+        print("File uploaded successfully.")
+
+        # Step 1: Transcribe the incoming audio
+        audio_data = await audio_file.read()
+        transcriber = aai.Transcriber()
+        transcript = transcriber.transcribe(audio_data)
+
+        if transcript.status == aai.TranscriptStatus.error:
+            raise HTTPException(status_code=500, detail=f"Transcription failed: {transcript.error}")
+        
+        # Robust check for empty or whitespace-only transcription
+        transcribed_text = transcript.text.strip() if transcript and transcript.text else ""
+        print(f"Transcription successful: '{transcribed_text}'")
+
+        if not transcribed_text:
+            raise HTTPException(status_code=400, detail="Transcription was empty. Please speak clearly before stopping the recording.")
+        
+        # Log the text being sent to the TTS API for debugging
+        print(f"Sending to Gemini TTS: '{transcribed_text}'")
+
+        # Step 2: Generate TTS audio using Gemini
+        generated_audio_data = await generate_gemini_audio(transcribed_text)
+        
+        # Step 3: Prepare the response with transcription and audio
+        # Encode the audio data to base64 to include it in the JSON response
+        audio_b64 = base64.b64encode(generated_audio_data).decode('utf-8')
+
+        response_content = json.dumps({
+            "transcription": transcribed_text,
+            "audio": audio_b64
+        })
+
+        return Response(content=response_content, media_type="application/json")
+
+    except HTTPException as e:
+        # Catch the specific error from the generate_gemini_audio function and re-raise it
+        print(f"Error from Gemini TTS: {e.detail}")
+        raise e
+    except Exception as e:
+        print(f"An unexpected error occurred in /tts/echo: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    if "INSERT_YOUR_ASSEMBLYAI_API_KEY_HERE" in ASSEMBLYAI_API_KEY:
+        print("Please set your AssemblyAI API key before running the application.")
+    else:
+        uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
