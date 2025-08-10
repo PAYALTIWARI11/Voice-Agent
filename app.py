@@ -15,9 +15,6 @@ import assemblyai as aai
 import base64
 import struct
 
-# --- API Keys ---
-# Using AssemblyAI for transcription and Gemini for text generation and TTS.
-# Gemini keys are provided by the canvas environment.
 GEMINI_API_KEY = "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw"
 ASSEMBLYAI_API_KEY = "661f2c6b775c428e8f9647c97314d502"
 
@@ -28,7 +25,9 @@ if not ASSEMBLYAI_API_KEY or ASSEMBLYAI_API_KEY == "INSERT_YOUR_ASSEMBLYAI_API_K
     print("FATAL ERROR: AssemblyAI API Key is missing. Please replace the placeholder.")
 
 genai.configure(api_key=GEMINI_API_KEY)
+# We will use gemini-1.5-flash for the chat model
 model = genai.GenerativeModel('gemini-1.5-flash')
+# And gemini-2.5-flash-preview-tts for the TTS model
 
 # AssemblyAI API details
 aai.settings.api_key = ASSEMBLYAI_API_KEY
@@ -224,6 +223,26 @@ async def tts_echo(audio_file: UploadFile = File(...)):
         raise e
     except Exception as e:
         print(f"An unexpected error occurred in /tts/echo: {e}")
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
+
+
+@app.post("/llm/query")
+async def llm_query(chat_request: ChatRequest):
+    """
+    (Day 8 functionality) Accepts text input, queries the Gemini LLM, and returns the response.
+    """
+    print(f"Received query for LLM: {chat_request.message}")
+    try:
+        # Generate content from the Gemini LLM
+        response_stream = model.generate_content(chat_request.message, stream=True)
+        full_response_text = ""
+        for chunk in response_stream:
+            full_response_text += chunk.text
+        
+        return {"response": full_response_text}
+
+    except Exception as e:
+        print(f"An error occurred in /llm/query: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
