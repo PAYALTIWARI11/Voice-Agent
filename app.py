@@ -15,6 +15,8 @@ import assemblyai as aai
 import base64
 import struct
 
+# --- API Keys ---
+# Using AssemblyAI for transcription, and Gemini for text generation and TTS.
 GEMINI_API_KEY = "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw"
 ASSEMBLYAI_API_KEY = "661f2c6b775c428e8f9647c97314d502"
 
@@ -25,11 +27,8 @@ if not ASSEMBLYAI_API_KEY or ASSEMBLYAI_API_KEY == "INSERT_YOUR_ASSEMBLYAI_API_K
     print("FATAL ERROR: AssemblyAI API Key is missing. Please replace the placeholder.")
 
 genai.configure(api_key=GEMINI_API_KEY)
-# We will use gemini-1.5-flash for the chat model
 model = genai.GenerativeModel('gemini-1.5-flash')
-# And gemini-2.5-flash-preview-tts for the TTS model
 
-# AssemblyAI API details
 aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 app = FastAPI()
@@ -75,49 +74,60 @@ def pcm_to_wav(pcm_data, sample_rate=16000):
     header += struct.pack('<I', len(pcm_data))
     return header + pcm_data
 
-
+# Gemini TTS function
 async def generate_gemini_audio(text: str) -> bytes:
     """
-    Generates audio from text using the Gemini TTS API.
-    Returns the audio data as a bytes object in WAV format.
+    Generates audio from text using the Gemini Text-to-Speech API.
+    The API returns raw PCM data, which needs to be converted to WAV format.
     """
-    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={GEMINI_API_KEY}"
+    if not text:
+        raise ValueError("Text for TTS cannot be empty.")
+    
+    # Corrected payload structure: The 'responseModality' key is removed,
+    # as the model's name implies the audio output.
     payload = {
-        "contents": [{"parts": [{"text": text}]}],
+        "contents": [
+            {
+                "parts": [
+                    {"text": text}
+                ]
+            }
+        ],
         "generationConfig": {
-            "responseModalities": ["AUDIO"],
             "speechConfig": {
                 "voiceConfig": {
-                    "prebuiltVoiceConfig": {"voiceName": "Kore"}
+                    "prebuiltVoiceConfig": {
+                        "voiceName": "Kore"
+                    }
                 }
             }
-        },
-        "model": "gemini-2.5-flash-preview-tts"
+        }
     }
+    
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={GEMINI_API_KEY}"
     
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.post(api_url, json=payload)
+            response = await client.post(api_url, json=payload, timeout=30)
             response.raise_for_status()
             
             result = response.json()
-            audio_data_b64 = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('inlineData', {}).get('data')
+            part = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0]
+            audio_data = part.get('inlineData', {}).get('data')
             
-            if audio_data_b64:
-                pcm_data = base64.b64decode(audio_data_b64)
-                wav_data = pcm_to_wav(pcm_data, sample_rate=16000)
-                return wav_data
-            else:
-                raise HTTPException(status_code=500, detail="Gemini TTS API returned no audio data.")
+            if not audio_data:
+                raise HTTPException(status_code=500, detail="Gemini TTS did not return audio data.")
+            
+            pcm_data = base64.b64decode(audio_data)
+            
+            return pcm_to_wav(pcm_data, sample_rate=16000)
 
         except httpx.HTTPStatusError as e:
-            print(f"Gemini TTS API returned an error: {e}")
-            raise HTTPException(status_code=e.response.status_code, detail=f"Gemini API Error: {e.response.text}")
+            print(f"Gemini TTS API error: {e.response.text}")
+            raise HTTPException(status_code=e.response.status_code, detail=f"Gemini TTS API Error: {e.response.text}")
         except Exception as e:
-            print(f"An unexpected error occurred in Gemini TTS call: {e}")
+            print(f"An unexpected error occurred during Gemini TTS: {e}")
             raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
-
-# --- API Endpoints ---
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_app(request: Request):
@@ -130,62 +140,19 @@ async def serve_app(request: Request):
         print(f"Error rendering index.html: {e}")
         return HTMLResponse(content=f"Error loading page: {e}", status_code=500)
 
-@app.post("/chat")
-async def chat_with_agent(chat_request: ChatRequest):
+@app.post("/llm/query")
+async def llm_query(audio_file: UploadFile = File(...)):
     """
-    (Day 4 functionality) Handles a text message, gets a Gemini response,
-    and streams back Gemini-generated audio.
+    (Day 9: Full Non-Streaming Pipeline with Gemini TTS)
+    1. Accepts audio input from the user.
+    2. Transcribes the audio using AssemblyAI.
+    3. Sends the transcription to the Gemini LLM to generate a response.
+    4. Sends the LLM's text response to Gemini TTS to generate audio.
+    5. Returns the final Gemini-generated audio file.
     """
+    print("Received audio file for full non-streaming pipeline.")
     try:
-        gemini_response_text = ""
-        response_stream = model.generate_content(chat_request.message, stream=True)
-        for chunk in response_stream:
-            gemini_response_text += chunk.text
-
-        audio_data = await generate_gemini_audio(gemini_response_text)
-        
-        return StreamingResponse(
-            content=iter([audio_data]),
-            media_type="audio/wav"
-        )
-
-    except Exception as e:
-        print(f"An error occurred in /chat: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
-
-@app.post("/transcribe/file")
-async def transcribe_file(audio_file: UploadFile = File(...)):
-    """
-    (Day 6 functionality) Receives an audio file, transcribes it, and returns the transcription.
-    """
-    try:
-        audio_data = await audio_file.read()
-        transcriber = aai.Transcriber()
-        transcript = transcriber.transcribe(audio_data)
-
-        if transcript.status == aai.TranscriptStatus.error:
-            raise HTTPException(status_code=500, detail=f"Transcription failed: {transcript.error}")
-
-        return {"transcription": transcript.text}
-
-    except Exception as e:
-        print(f"An error occurred during transcription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not transcribe file: {e}")
-
-@app.post("/tts/echo")
-async def tts_echo(audio_file: UploadFile = File(...)):
-    """
-    (Day 7 functionality) Echo Bot v2, now with Gemini TTS.
-    1. Transcribes incoming audio using AssemblyAI.
-    2. Sends the transcription to Gemini TTS to get new audio.
-    3. Returns the new Gemini audio and transcription as a JSON object.
-    """
-    print("Received audio file for Echo Bot v2 processing.")
-    try:
-        # This will be printed to the console when a file is received
-        print("File uploaded successfully.")
-
-        # Step 1: Transcribe the incoming audio
+        # Step 1: Transcribe the incoming audio using AssemblyAI
         audio_data = await audio_file.read()
         transcriber = aai.Transcriber()
         transcript = transcriber.transcribe(audio_data)
@@ -193,61 +160,43 @@ async def tts_echo(audio_file: UploadFile = File(...)):
         if transcript.status == aai.TranscriptStatus.error:
             raise HTTPException(status_code=500, detail=f"Transcription failed: {transcript.error}")
         
-        # Robust check for empty or whitespace-only transcription
         transcribed_text = transcript.text.strip() if transcript and transcript.text else ""
         print(f"Transcription successful: '{transcribed_text}'")
 
         if not transcribed_text:
             raise HTTPException(status_code=400, detail="Transcription was empty. Please speak clearly before stopping the recording.")
         
-        # Log the text being sent to the TTS API for debugging
-        print(f"Sending to Gemini TTS: '{transcribed_text}'")
-
-        # Step 2: Generate TTS audio using Gemini
-        generated_audio_data = await generate_gemini_audio(transcribed_text)
+        # Step 2: Send the transcription to the Gemini LLM
+        print(f"Sending to Gemini LLM: '{transcribed_text}'")
+        response_stream = model.generate_content(transcribed_text, stream=True)
+        llm_response_text = ""
+        for chunk in response_stream:
+            llm_response_text += chunk.text
         
-        # Step 3: Prepare the response with transcription and audio
-        # Encode the audio data to base64 to include it in the JSON response
-        audio_b64 = base64.b64encode(generated_audio_data).decode('utf-8')
+        cleaned_llm_response = llm_response_text.strip()
+        print(f"Received LLM response: '{cleaned_llm_response}'")
 
-        response_content = json.dumps({
-            "transcription": transcribed_text,
-            "audio": audio_b64
-        })
+        # Step 3: Send the LLM's response to Gemini TTS to generate audio
+        print(f"Sending LLM response to Gemini for TTS...")
+        tts_audio_data = await generate_gemini_audio(cleaned_llm_response)
+        print("Gemini audio generation successful.")
 
-        return Response(content=response_content, media_type="application/json")
+        # Step 4: Return the audio file to the client
+        return StreamingResponse(
+            content=iter([tts_audio_data]),
+            media_type="audio/wav"
+        )
 
     except HTTPException as e:
-        # Catch the specific error from the generate_gemini_audio function and re-raise it
-        print(f"Error from Gemini TTS: {e.detail}")
+        print(f"Error in /llm/query pipeline: {e.detail}")
         raise e
     except Exception as e:
-        print(f"An unexpected error occurred in /tts/echo: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
-
-
-@app.post("/llm/query")
-async def llm_query(chat_request: ChatRequest):
-    """
-    (Day 8 functionality) Accepts text input, queries the Gemini LLM, and returns the response.
-    """
-    print(f"Received query for LLM: {chat_request.message}")
-    try:
-        # Generate content from the Gemini LLM
-        response_stream = model.generate_content(chat_request.message, stream=True)
-        full_response_text = ""
-        for chunk in response_stream:
-            full_response_text += chunk.text
-        
-        return {"response": full_response_text}
-
-    except Exception as e:
-        print(f"An error occurred in /llm/query: {e}")
+        print(f"An unexpected error occurred in /llm/query: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 if __name__ == "__main__":
     import uvicorn
-    if "INSERT_YOUR_ASSEMBLYAI_API_KEY_HERE" in ASSEMBLYAI_API_KEY:
-        print("Please set your AssemblyAI API key before running the application.")
+    if "INSERT_YOUR_ASSEMBLYAI_API_KEY_HERE" in ASSEMBLYAI_API_KEY or "INSERT_YOUR_GEMINI_API_KEY_HERE" in GEMINI_API_KEY:
+        print("Please set your AssemblyAI and Gemini API keys before running the application.")
     else:
         uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

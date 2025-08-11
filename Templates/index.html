@@ -9,7 +9,6 @@
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
         body {
             font-family: 'Poppins', sans-serif;
-            /* A more vibrant background gradient */
             background: linear-gradient(135deg, #fce38a 0%, #fc8a8a 100%);
         }
         .container-card {
@@ -17,7 +16,6 @@
             backdrop-filter: blur(10px);
             background-color: rgba(255, 255, 255, 0.9);
             border: 1px solid rgba(255, 255, 255, 0.5);
-            /* Add a more pronounced shadow for depth */
             box-shadow: 0 10px 25px rgba(0,0,0,0.15);
         }
         .section-card {
@@ -49,31 +47,15 @@
         <!-- Header for the page -->
         <header class="text-center">
             <h1 class="text-5xl font-extrabold text-gray-800 flex items-center justify-center">
-                <span class="mr-3">30 Days of AI Voice Agents</span> 🎙️
+                <span class="mr-3">AI Voice Agent</span> 🎙️
             </h1>
-            <p class="mt-2 text-xl text-gray-600">All-in-One: Text-to-Speech & Echo Bot v2</p>
+            <p class="mt-2 text-xl text-gray-600">Echo Bot V2 with Full Pipeline</p>
         </header>
-
-        <!-- Text to Speech Section -->
-        <section class="section-card p-6 rounded-2xl border border-gray-200">
-            <h1 class="text-3xl font-bold text-gray-700 mb-4 flex items-center">
-                <span class="mr-2">Text to Speech</span> 🗣️
-            </h1>
-            <div class="space-y-4">
-                <textarea id="tts-text-area" class="w-full p-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-pink-300 transition-colors" rows="4" placeholder="Enter text to convert to speech..."></textarea>
-                <div class="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4">
-                    <select id="voice-select" class="w-full sm:w-auto p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-4 focus:ring-pink-300 transition-colors"></select>
-                    <button id="speak-button" class="btn w-full sm:w-auto px-8 py-3 bg-pink-500 text-white font-semibold rounded-lg shadow-lg hover:bg-pink-600">
-                        ▶️ Speak
-                    </button>
-                </div>
-            </div>
-        </section>
 
         <!-- Echo Bot Section -->
         <section class="section-card p-6 rounded-2xl border border-gray-200">
             <h1 class="text-3xl font-bold text-gray-700 mb-4 flex items-center">
-                <span class="mr-2">Echo Bot</span> 🤖
+                <span class="mr-2">Full Pipeline</span> 🤖
             </h1>
             <div class="mt-4 space-y-6 text-center">
                 <p id="status-message" class="text-gray-600 text-lg transition-all duration-300">Press 'Start Recording' to begin.</p>
@@ -85,68 +67,54 @@
                         ⏹️ Stop Recording
                     </button>
                 </div>
-                <div id="transcription-container" class="mt-6 hidden">
-                    <p class="text-xl font-semibold text-gray-800">Transcription:</p>
-                    <p id="transcribed-text" class="mt-2 text-gray-600 italic break-words"></p>
-                </div>
                 <audio id="audioPlayback" class="w-full mt-6 rounded-lg shadow-inner" controls></audio>
             </div>
         </section>
-
     </div>
 
     <script>
-        // --- Text to Speech Logic ---
-        const ttsTextArea = document.getElementById('tts-text-area');
-        const voiceSelect = document.getElementById('voice-select');
-        const speakButton = document.getElementById('speak-button');
-        const synth = window.speechSynthesis;
-
-        let voices = [];
-
-        function populateVoiceList() {
-            voices = synth.getVoices().sort((a, b) => a.name.localeCompare(b.name));
-            voiceSelect.innerHTML = '';
-            voices.forEach(voice => {
-                const option = document.createElement('option');
-                option.textContent = `${voice.name} (${voice.lang})`;
-                option.setAttribute('data-lang', voice.lang);
-                option.setAttribute('data-name', voice.name);
-                voiceSelect.appendChild(option);
-            });
-        }
-
-        if (synth.onvoiceschanged !== undefined) {
-            synth.onvoiceschanged = populateVoiceList;
-        }
-        populateVoiceList();
-
-        speakButton.addEventListener('click', () => {
-            const text = ttsTextArea.value;
-            if (text !== '') {
-                const utterance = new SpeechSynthesisUtterance(text);
-                const selectedOption = voiceSelect.selectedOptions[0].getAttribute('data-name');
-                utterance.voice = voices.find(voice => voice.name === selectedOption);
-                synth.speak(utterance);
-            }
-        });
-
-        // --- Echo Bot Logic ---
+        // API Configuration
+        // 🚨 IMPORTANT: Replace these placeholders with your actual API keys.
+        const GEMINI_API_KEY = "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw";
+        const ASSEMBLYAI_API_KEY = "661f2c6b775c428e8f9647c97314d502";
+        const GEMINI_LLM_MODEL = 'gemini-1.5-flash-latest';
+        const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts';
+        const ASSEMBLYAI_API_URL = 'https://api.assemblyai.com/v2/upload';
+        const GEMINI_LLM_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_LLM_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+        const GEMINI_TTS_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TTS_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+        
+        // DOM Elements
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const audioPlayback = document.getElementById('audioPlayback');
         const statusMessage = document.getElementById('status-message');
-        const transcriptionContainer = document.getElementById('transcription-container');
-        const transcribedText = document.getElementById('transcribed-text');
 
+        // Media Recorder State
         let mediaRecorder;
         let audioChunks = [];
+        let isRecording = false;
 
-        // Function to start the recording process
+        // --- API Key Validation and Initial Setup ---
+        window.onload = function() {
+            if (GEMINI_API_KEY === "INSERT_YOUR_GEMINI_API_KEY_HERE" || ASSEMBLYAI_API_KEY === "INSERT_YOUR_ASSEMBLYAI_API_KEY_HERE") {
+                updateStatus('🚨 Please set your API keys in the code.', 'text-red-500 font-bold');
+                startButton.disabled = true;
+            } else {
+                startButton.addEventListener('click', startRecording);
+                stopButton.addEventListener('click', stopRecording);
+            }
+        };
+
+        // Utility Functions
+        function updateStatus(message, color = 'text-gray-600') {
+            statusMessage.textContent = message;
+            statusMessage.className = `text-lg transition-all duration-300 ${color}`;
+        }
+
         async function startRecording() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm; codecs=opus' });
                 audioChunks = [];
 
                 mediaRecorder.ondataavailable = event => {
@@ -154,100 +122,281 @@
                 };
 
                 mediaRecorder.onstop = () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                    processAudio(audioBlob);
+                    handleAudioData();
                 };
 
                 mediaRecorder.start();
+                isRecording = true;
                 startButton.disabled = true;
                 stopButton.disabled = false;
-                statusMessage.textContent = 'Recording...';
+                updateStatus('Recording...', 'text-red-500');
                 statusMessage.classList.add('animate-pulse-on-record');
-                transcriptionContainer.classList.add('hidden');
-                transcribedText.textContent = '';
             } catch (error) {
                 console.error('Error accessing microphone:', error);
-                statusMessage.textContent = 'Error: Could not access microphone. Please check your permissions.';
-                startButton.disabled = false;
-                stopButton.disabled = true;
+                updateStatus('Error accessing microphone. Please allow access.', 'text-red-500');
             }
         }
 
-        // Function to stop the recording process
         function stopRecording() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            if (isRecording) {
                 mediaRecorder.stop();
-                mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                isRecording = false;
                 startButton.disabled = false;
                 stopButton.disabled = true;
-                statusMessage.textContent = 'Processing audio... Please wait.';
+                updateStatus('Processing...', 'text-blue-500');
                 statusMessage.classList.remove('animate-pulse-on-record');
             }
         }
 
-        // Function to process the audio Blob and send it to the backend
-        async function processAudio(audioBlob) {
+        // Main Audio Handling Pipeline
+        async function handleAudioData() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+
             try {
-                // Display the "uploaded successfully" message in the UI
-                statusMessage.textContent = 'File uploaded successfully. Getting transcription...';
+                // Step 1: Transcribe using AssemblyAI
+                updateStatus('Uploading audio for transcription...', 'text-blue-500');
+                const transcriptionUrl = await uploadAudioToAssemblyAI(audioBlob);
 
-                const formData = new FormData();
-                formData.append('audio_file', audioBlob, 'audio.webm');
+                updateStatus('Transcribing audio...', 'text-blue-500');
+                const transcribedText = await getTranscriptionResult(transcriptionUrl);
 
-                const response = await fetch('/tts/echo', {
-                    method: 'POST',
-                    body: formData
-                });
+                if (!transcribedText) {
+                    updateStatus('Transcription was empty. Please try again.', 'text-red-500');
+                    return;
+                }
+                updateStatus(`Transcription: "${transcribedText}"`);
                 
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.detail || 'An unknown error occurred.');
+                // Step 2: Generate response with Gemini LLM
+                updateStatus('Generating response with Gemini...', 'text-blue-500');
+                const llmResponseText = await generateGeminiText(transcribedText);
+                if (!llmResponseText) {
+                    updateStatus('Gemini LLM did not return a response.', 'text-red-500');
+                    return;
                 }
                 
-                const responseData = await response.json();
-                const transcription = responseData.transcription;
-                const audioBase64 = responseData.audio;
+                // Step 3: Generate audio from the response with Gemini TTS
+                updateStatus('Generating audio with Gemini TTS...', 'text-blue-500');
+                const audioBlobFromTTS = await generateGeminiAudio(llmResponseText);
 
-                if (transcription) {
-                    statusMessage.textContent = 'Transcription and audio received! Playing back...';
-                    transcribedText.textContent = transcription;
-                    transcriptionContainer.classList.remove('hidden');
-
-                    // Convert Base64 audio to a Blob and play it
-                    const audioBlob = b64toBlob(audioBase64, 'audio/wav');
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    audioPlayback.src = audioUrl;
-                    audioPlayback.play();
-                } else {
-                    throw new Error('Transcription was empty.');
-                }
+                // Step 4: Play the final audio response
+                audioPlayback.src = URL.createObjectURL(audioBlobFromTTS);
+                audioPlayback.play();
+                updateStatus('Audio response ready. Playing now...', 'text-green-600');
 
             } catch (error) {
-                console.error('Error:', error);
-                statusMessage.textContent = `Error: ${error.message}`;
+                console.error('Pipeline error:', error);
+                updateStatus(`Error: ${error.message}`, 'text-red-500');
             }
         }
 
-        // Helper function to convert a Base64 string to a Blob
-        function b64toBlob(b64Data, contentType = '', sliceSize = 512) {
-            const byteCharacters = atob(b64Data);
-            const byteArrays = [];
-            for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-                const slice = byteCharacters.slice(offset, offset + sliceSize);
-                const byteNumbers = new Array(slice.length);
-                for (let i = 0; i < slice.length; i++) {
-                    byteNumbers[i] = slice.charCodeAt(i);
+        // --- AssemblyAI Functions ---
+        async function uploadAudioToAssemblyAI(audioBlob) {
+            const response = await fetch(ASSEMBLYAI_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': ASSEMBLYAI_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: audioBlob
+            });
+
+            if (response.status === 401) {
+                throw new Error("AssemblyAI API key is invalid.");
+            }
+            if (!response.ok) {
+                let errorText = await response.text();
+                if (errorText) {
+                    throw new Error(`AssemblyAI API upload error: ${errorText}`);
+                } else {
+                    throw new Error(`AssemblyAI API upload error with status: ${response.status}`);
                 }
-                const byteArray = new Uint8Array(byteNumbers);
-                byteArrays.push(byteArray);
             }
-            return new Blob(byteArrays, { type: contentType });
+            const data = await response.json();
+            return data.upload_url;
         }
 
+        async function getTranscriptionResult(audioUrl) {
+            const createTranscriptResponse = await fetch(ASSEMBLYAI_API_URL.replace('/upload', '/transcript'), {
+                method: 'POST',
+                headers: {
+                    'Authorization': ASSEMBLYAI_API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ audio_url: audioUrl })
+            });
+            if (createTranscriptResponse.status === 401) {
+                throw new Error("AssemblyAI API key is invalid.");
+            }
+            if (!createTranscriptResponse.ok) {
+                let errorText = await createTranscriptResponse.text();
+                if (errorText) {
+                    throw new Error(`AssemblyAI API transcript creation error: ${errorText}`);
+                } else {
+                    throw new Error(`AssemblyAI API transcript creation error with status: ${createTranscriptResponse.status}`);
+                }
+            }
+            const createData = await createTranscriptResponse.json();
+            const transcriptId = createData.id;
 
-        // Add event listeners to the buttons
-        startButton.addEventListener('click', startRecording);
-        stopButton.addEventListener('click', stopRecording);
+            let transcriptStatus = 'queued';
+            let retries = 0;
+            const maxRetries = 10;
+            let transcribedText = '';
+            
+            while (transcriptStatus !== 'completed' && transcriptStatus !== 'error' && retries < maxRetries) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const checkResponse = await fetch(`${ASSEMBLYAI_API_URL.replace('/upload', '/transcript')}/${transcriptId}`, {
+                    method: 'GET',
+                    headers: { 'Authorization': ASSEMBLYAI_API_KEY }
+                });
+                if (checkResponse.status === 401) {
+                    throw new Error("AssemblyAI API key is invalid.");
+                }
+                const checkData = await checkResponse.json();
+                transcriptStatus = checkData.status;
+                if (transcriptStatus === 'completed') {
+                    transcribedText = checkData.text;
+                }
+                retries++;
+            }
+            
+            if (transcriptStatus !== 'completed') {
+                throw new Error(`Transcription failed with status: ${transcriptStatus}`);
+            }
+            
+            return transcribedText;
+        }
+        
+        // --- Gemini Functions ---
+        async function generateGeminiText(prompt) {
+            const payload = {
+                contents: [{
+                    parts: [{
+                        text: prompt
+                    }]
+                }],
+                generationConfig: {
+                    responseModalities: ["TEXT"]
+                }
+            };
+
+            const response = await fetch(GEMINI_LLM_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 403) {
+                throw new Error("Gemini LLM API key is invalid.");
+            }
+            if (!response.ok) {
+                let errorText = await response.text();
+                if (errorText) {
+                    throw new Error(`Gemini LLM API error: ${errorText}`);
+                } else {
+                    throw new Error(`Gemini LLM API error with status: ${response.status}`);
+                }
+            }
+
+            const data = await response.json();
+            return data.candidates[0].content.parts[0].text;
+        }
+
+        async function generateGeminiAudio(text) {
+            const payload = {
+                contents: [{ parts: [{ text: text }] }],
+                generationConfig: {
+                    responseModalities: ["AUDIO"],
+                    speechConfig: {
+                        voiceConfig: {
+                            prebuiltVoiceConfig: { voiceName: 'Despina' }
+                        }
+                    }
+                }
+            };
+
+            const response = await fetch(GEMINI_TTS_API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.status === 403) {
+                throw new Error("Gemini TTS API key is invalid.");
+            }
+            if (!response.ok) {
+                let errorText = await response.text();
+                if (errorText) {
+                    throw new Error(`Gemini TTS API error: ${errorText}`);
+                } else {
+                    throw new Error(`Gemini TTS API error with status: ${response.status}`);
+                }
+            }
+
+            const result = await response.json();
+            const audioData = result.candidates[0].content.parts[0].inlineData.data;
+            const pcmData = base64ToArrayBuffer(audioData);
+            const pcm16 = new Int16Array(pcmData);
+            const wavBlob = pcmToWav(pcm16, 16000);
+            return wavBlob;
+        }
+
+        // --- Utility Functions ---
+        function base64ToArrayBuffer(base64) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return bytes.buffer;
+        }
+
+        function pcmToWav(pcmData, sampleRate) {
+            const numSamples = pcmData.length;
+            const buffer = new ArrayBuffer(44 + numSamples * 2);
+            const view = new DataView(buffer);
+
+            let offset = 0;
+            function writeString(str) {
+                for (let i = 0; i < str.length; i++) {
+                    view.setUint8(offset++, str.charCodeAt(i));
+                }
+            }
+            function writeUint32(val) {
+                view.setUint32(offset, val, true);
+                offset += 4;
+            }
+            function writeUint16(val) {
+                view.setUint16(offset, val, true);
+                offset += 2;
+            }
+
+            writeString('RIFF');
+            writeUint32(36 + numSamples * 2);
+            writeString('WAVE');
+            writeString('fmt ');
+            writeUint32(16);
+            writeUint16(1); // Audio format (PCM)
+            writeUint16(1); // Number of channels
+            writeUint32(sampleRate);
+            writeUint32(sampleRate * 2); // Byte rate
+            writeUint16(2); // Block align
+            writeUint16(16); // Bits per sample
+            writeString('data');
+            writeUint32(numSamples * 2);
+
+            for (let i = 0; i < numSamples; i++) {
+                view.setInt16(offset, pcmData[i], true);
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
     </script>
 </body>
 </html>
