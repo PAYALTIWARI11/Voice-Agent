@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Voice Agent - Day 10</title>
+    <title>AI Voice Agent - Day 11</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
@@ -77,7 +77,7 @@
             <h1 class="text-4xl font-extrabold text-gray-800 flex items-center justify-center">
                 <span class="mr-3">30 Days of AI Voice Agents</span> 🎙️
             </h1>
-            <p class="mt-2 text-xl text-gray-600">Day 10: Chat History</p>
+            <p class="mt-2 text-xl text-gray-600">Day 11: Robust Error Handling</p>
         </header>
 
         <!-- Chat History Display -->
@@ -115,7 +115,7 @@
         // API Configuration
         // 🚨 IMPORTANT: Replace these placeholders with your actual API keys.
         const GEMINI_API_KEY = "AIzaSyDbfrWHOC0aNXbG3fAwU_kPYxDW67LxLEw";
-        const  ASSEMBLYAI_API_KEY = "661f2c6b775c428e8f9647c97314d502";
+        const ASSEMBLYAI_API_KEY = "661f2c6b775c428e8f9647c97314d502";
         const GEMINI_LLM_MODEL = 'gemini-1.5-flash-latest';
         const ASSEMBLYAI_API_URL = 'https://api.assemblyai.com/v2/upload';
         const GEMINI_LLM_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_LLM_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
@@ -131,8 +131,8 @@
         let mediaRecorder;
         let audioChunks = [];
         let sessionId;
-        let chatHistory = {}; // In-memory datastore for chat history
-        let appState = 'idle'; // New state variable: 'idle', 'recording', 'processing', 'speaking'
+        let chatHistory = {}; 
+        let appState = 'idle';
 
         // --- Initial Setup and Event Listeners ---
         window.onload = function() {
@@ -187,7 +187,7 @@
                     statusMessage.classList.remove('animate-pulse-on-record');
                     break;
                 case 'speaking':
-                    updateStatus('Audio response ready. Playing now...', 'text-green-600');
+                    updateStatus('Speaking the response...', 'text-green-600');
                     startButton.disabled = true;
                     stopButton.disabled = true;
                     statusMessage.classList.remove('animate-pulse-on-record');
@@ -251,11 +251,16 @@
             }
         }
 
-        // --- Main Audio Handling Pipeline ---
+        // --- Main Audio Handling Pipeline with Error Handling ---
         async function handleAudioData() {
             const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             let llmResponseText;
 
+            // --- SIMULATE API ERRORS ---
+            // Uncomment one of these lines to simulate an error for testing purposes.
+            // throw new Error("Simulated STT API failure");
+            // throw new Error("Simulated LLM API failure");
+            
             try {
                 // Step 1: Transcribe using AssemblyAI
                 updateStatus('Uploading audio for transcription...', 'text-blue-500');
@@ -266,11 +271,10 @@
                 
                 if (!transcribedText) {
                     updateStatus('Transcription was empty. Please try again.', 'text-red-500');
-                    updateUIForState('idle'); // Reset state
+                    updateUIForState('idle'); 
                     return;
                 }
                 
-                // Add user message to chat history and UI
                 chatHistory[sessionId].push({ role: 'user', parts: [{ text: transcribedText }] });
                 renderChatHistory();
 
@@ -279,11 +283,10 @@
                 llmResponseText = await generateGeminiText(chatHistory[sessionId]);
                 if (!llmResponseText) {
                     updateStatus('Gemini LLM did not return a response.', 'text-red-500');
-                    updateUIForState('idle'); // Reset state
+                    updateUIForState('idle'); 
                     return;
                 }
                 
-                // Add model response to chat history and UI
                 chatHistory[sessionId].push({ role: 'model', parts: [{ text: llmResponseText }] });
                 renderChatHistory();
                 
@@ -292,9 +295,10 @@
                 speakResponse(llmResponseText);
 
             } catch (error) {
-                console.error('Pipeline error:', error);
+                console.error('An error occurred during the voice agent pipeline:', error);
                 updateStatus(`Error: ${error.message}`, 'text-red-500');
-                updateUIForState('idle'); // Reset state on error
+                // Play a fallback message so the user knows something went wrong.
+                speakFallbackResponse();
             }
         }
 
@@ -305,7 +309,20 @@
             }
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.onend = () => {
-                updateUIForState('idle'); // Return to idle state after speaking
+                updateUIForState('idle');
+            };
+            synth.speak(utterance);
+            updateUIForState('speaking');
+        }
+
+        function speakFallbackResponse() {
+            const synth = window.speechSynthesis;
+            if (synth.speaking) {
+                synth.cancel();
+            }
+            const utterance = new SpeechSynthesisUtterance("I'm having trouble connecting right now.");
+            utterance.onend = () => {
+                updateUIForState('idle');
             };
             synth.speak(utterance);
             updateUIForState('speaking');
@@ -395,3 +412,4 @@
     </script>
 </body>
 </html>
+
