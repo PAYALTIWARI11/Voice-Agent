@@ -1,76 +1,57 @@
-🎯 30 Days of AI Voice Agents
+# 🤖🎙️ Voice Agent – Your AI-Powered Conversational Assistant  
 
-Welcome to Day 12 of the 30 Days of AI Voice Agents Challenge!
-This project is part of a daily build series aimed at creating a functional, user-friendly, and robust voice-controlled AI assistant.
+> 🚀 **Part of my 30 Days of AI Voice Agents Challenge** – A smart, voice-controlled AI assistant powered by **MURF AI**, **AssemblyAI**, and **Google Gemini API**. Talk to it, and it talks back – just like chatting with a friend!  
 
-The agent combines Speech-to-Text (STT) and a Large Language Model (LLM) to engage in natural, conversational interactions with the user.
+---
 
-✨ Features
+## ✨ **What is Voice Agent?**  
+The **Voice Agent** listens to your voice 🎤, understands your question 🧠, and responds with natural speech 🔊.  
+It combines **Speech-to-Text (STT)**, **Large Language Models (LLM)**, and **Text-to-Speech (TTS)** in one seamless, interactive application.  
 
-🎙️ Conversational Interface – Listens to user input, processes it, and responds naturally.
+---
 
-🗣️ Real-time Text-to-Speech – Uses the browser's native TTS for quick audio responses.
+## 🌟 **Key Features**  
 
-💬 Chat History – Maintains a full session history for context-aware conversations.
+- 🎙️ **Real-Time Conversation** – Ask questions, get instant answers.  
+- 🗣️ **Speech-to-Text** – Powered by **AssemblyAI** for accurate transcription.  
+- 🔊 **Text-to-Speech** – Uses **Web Speech API** for lifelike voice output.  
+- 💬 **Chat History** – Keeps track of the entire conversation.  
+- 🎨 **Modern UI** – Beautiful, responsive, and mobile-friendly with Tailwind CSS.  
+- 🛡️ **Robust Error Handling** – Gracefully manages API failures.  
 
-✅ Robust Error Handling – try...catch blocks ensure graceful handling of API failures with friendly fallback messages.
+---
 
-🎨 Revamped UI – Clean, modern, responsive interface with a single smart record button.
+## 🛠 **Tech Stack**  
 
-🛠️ Technologies Used
-Frontend
+**Frontend**:  
+- HTML, CSS, JavaScript  
+- Tailwind CSS 🎨  
 
-HTML, CSS, JavaScript – Core structure and logic.
+**Backend**:  
+- Python (Flask) 🐍  
+- Murf AI Integration  
 
-Tailwind CSS – For responsive and modern styling.
+**APIs**:  
+- [AssemblyAI](https://www.assemblyai.com/) – Speech-to-Text  
+- [Google Gemini API](https://ai.google/) – Conversational AI  
+- Web Speech API – Text-to-Speech  
 
-APIs
+---
 
-AssemblyAI – High-quality Speech-to-Text (STT) transcription.
+## 🧠 **How It Works**  
 
-Google Gemini API – The LLM providing conversational intelligence.
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser
+    participant AssemblyAI
+    participant Gemini
+    participant WebSpeechAPI
 
-Web Speech API – Native browser Text-to-Speech (TTS).
-
-🧠 Architecture
-
-Flow Overview:
-
-User Input – The microphone captures audio when the record button is tapped.
-
-Transcription – Audio is sent to AssemblyAI for transcription into text.
-
-LLM Processing – Transcribed text + chat history sent to Gemini API.
-
-Response Generation – Gemini API returns a natural language response.
-
-Audio Output – Web Speech API converts the response to speech and plays it back.
-
-💡 Error Handling:
-All API calls are wrapped in try...catch blocks. If any service fails, the app returns a friendly fallback message instead of breaking.
-
-🚀 Setup & Running the Application
-Prerequisites
-
-Modern web browser (Chrome, Firefox, Edge, Safari) with microphone access.
-
-API keys for AssemblyAI and Google Gemini.
-
-Configuration
-
-Open index.html in your code editor.
-
-Locate the // API Configuration section in the <script> tag.
-
-Replace placeholder values with your API keys:
-
-const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
-const ASSEMBLYAI_API_KEY = "YOUR_ASSEMBLYAI_API_KEY";
-
-Running the Code
-
-Open index.html in your preferred browser.
-
-Grant microphone access when prompted.
-
-Tap the record button 🎤 to start interacting with the AI agent.
+    User->>Browser: 🎤 Record voice
+    Browser->>AssemblyAI: Send audio for transcription
+    AssemblyAI-->>Browser: Return transcribed text
+    Browser->>Gemini: Send text + chat history
+    Gemini-->>Browser: Return AI response
+    Browser->>WebSpeechAPI: Convert text to speech
+    Browser-->>User: 🔊 Play audio response
