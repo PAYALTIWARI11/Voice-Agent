@@ -38,19 +38,11 @@ sequenceDiagram
 ## 📸 Screenshots
 
 **Conversation View**
-![Conversation View](./screenshots/conversation_view.png)
+![Conversation View](https://github.com/PAYALTIWARI11/Voice-Agent/blob/main/Screenshot%202025-08-15%20122558.png)
 
 **Voice Agent Panel**
-![Voice Agent Panel](./screenshots/voice_agent_panel.png)
+![Voice Agent Panel](https://github.com/PAYALTIWARI11/Voice-Agent/blob/main/Screenshot%202025-08-09%20002950.png)
 
----
-
-## 🎥 Demo Video
-
-📹 **Watch the Voice Agent in action**:
-[🎬 Click to Watch Video](YOUR_VIDEO_LINK)
-
----
 
 ## ⚙️ Installation & Setup
 
