@@ -55,3 +55,58 @@ sequenceDiagram
     Gemini-->>Browser: Return AI response
     Browser->>WebSpeechAPI: Convert text to speech
     Browser-->>User: 🔊 Play audio response
+
+
+📸 Screenshots
+Conversation View	Voice Agent Panel
+
+	
+🎥 Demo Video
+
+📹 Watch the Voice Agent in action:
+
+🎬 Click to Watch Video
+
+⚙️ Installation & Setup
+1️⃣ Prerequisites
+
+Modern browser with microphone access.
+
+API keys for AssemblyAI and Google Gemini.
+
+2️⃣ Clone the Repository
+git clone https://github.com/PAYALTIWARI11/Voice-Agent.git
+cd Voice-Agent
+
+3️⃣ Install Dependencies
+pip install -r requirement.txt
+
+4️⃣ Configure API Keys
+
+Open index.html and replace:
+
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY";
+const ASSEMBLYAI_API_KEY = "YOUR_ASSEMBLYAI_API_KEY";
+
+5️⃣ Run the Project
+python app.py
+
+
+Then open it in your browser and allow microphone access. 🎤
+
+🤝 Contributing
+
+💡 Have ideas? Found a bug? Open a pull request or an issue — let’s make it better together!
+
+👩‍💻 Author
+
+Payal Tiwari
+B.Tech Final Year | Data Science Major
+LinkedIn • GitHub
+
+
+
+---
+
+
+
