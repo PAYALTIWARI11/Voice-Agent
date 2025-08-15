@@ -1,6 +1,4 @@
 
-
-````markdown
 # 🎙️ Voice Agent
 
 An intelligent voice-based AI assistant that can transcribe speech, understand context, and respond back with synthesized voice — powered by **AssemblyAI**, **Google Gemini**, and **Web Speech API**.
@@ -109,13 +107,8 @@ Then open the provided link in your browser and **allow microphone access**. �
 Contributions, issues, and feature requests are welcome!
 Feel free to fork the repo and submit pull requests.
 
----
 
-## 📜 License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
-
----
 
 ## 👩‍💻 Author
 
